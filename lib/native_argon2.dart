@@ -110,11 +110,10 @@ class NativeArgon2 {
 
     receivePort.listen((dynamic data) {
       if (data is _Argon2EncodedRequest) {
-        final params = data.params;
         final result = _argon2HashEncodedByType(
-          Argon2_type.Argon2_i,
+          data.type,
           bindings,
-          params,
+          data.params,
         );
 
         setup.sendPort.send(_Argon2HashResponse(data.id, result));

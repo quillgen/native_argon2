@@ -24,8 +24,8 @@ void main() {
     Argon2LibraryLoader.instance.configure(libraryPath: testLibPath);
   });
 
-  group('Argon2i wrapped high-level api', () {
-    test('argon2i returns a valid encoded hash', () async {
+  group('Argon2 encoded apis', () {
+    test('argon2i encoded', () async {
       final nativeArgon2 = NativeArgon2();
       final int encodedLen = 128;
       final Pointer<Char> encodedPtr = malloc.allocate<Char>(encodedLen);
@@ -42,7 +42,7 @@ void main() {
       final result = nativeArgon2.argon2iHashEncoded(params);
       expect(result, 0);
       final encodedStr = encodedPtr.cast<Utf8>().toDartString();
-      malloc.free(encodedPtr);
+
       expect(
         encodedStr,
         equals(
@@ -50,10 +50,62 @@ void main() {
         ),
       );
     });
+
+    test('argon2d encoded', () async {
+      final nativeArgon2 = NativeArgon2();
+      final int encodedLen = 128;
+      final Pointer<Char> encodedPtr = malloc.allocate<Char>(encodedLen);
+      final params = Argon2EncodedParams(
+        tCost: 2,
+        mCost: 65536,
+        parallelism: 4,
+        password: utf8.encode('password'),
+        salt: utf8.encode('somesalt'),
+        hashLen: 24,
+        encoded: encodedPtr,
+        encodedLen: encodedLen,
+      );
+      final result = nativeArgon2.argon2dHashEncoded(params);
+      expect(result, 0);
+      final encodedStr = encodedPtr.cast<Utf8>().toDartString();
+
+      expect(
+        encodedStr,
+        equals(
+          '\$argon2d\$v=19\$m=65536,t=2,p=4\$c29tZXNhbHQ\$7Kn6V2imUuaFkZmKdZLb3nvg91N5Lt7H',
+        ),
+      );
+    });
+
+    test('argon2id encoded', () async {
+      final nativeArgon2 = NativeArgon2();
+      final int encodedLen = 128;
+      final Pointer<Char> encodedPtr = malloc.allocate<Char>(encodedLen);
+      final params = Argon2EncodedParams(
+        tCost: 2,
+        mCost: 65536,
+        parallelism: 4,
+        password: utf8.encode('password'),
+        salt: utf8.encode('somesalt'),
+        hashLen: 24,
+        encoded: encodedPtr,
+        encodedLen: encodedLen,
+      );
+      final result = nativeArgon2.argon2idHashEncoded(params);
+      expect(result, 0);
+      final encodedStr = encodedPtr.cast<Utf8>().toDartString();
+
+      expect(
+        encodedStr,
+        equals(
+          '\$argon2id\$v=19\$m=65536,t=2,p=4\$c29tZXNhbHQ\$F1jG2CV3/Nr+yRuIsPKw0J9r4s7cJHBU',
+        ),
+      );
+    });
   });
 
-  group('Argon2i async high-level api', () {
-    test('argon2i returns a valid encoded hash', () async {
+  group('Argon2 encoded apis (async)', () {
+    test('argon2i encoded async', () async {
       final nativeArgon2 = NativeArgon2();
       final int encodedLen = 128;
       final Pointer<Char> encodedPtr = malloc.allocate<Char>(encodedLen);
@@ -75,6 +127,58 @@ void main() {
         encodedStr,
         equals(
           '\$argon2i\$v=19\$m=65536,t=2,p=4\$c29tZXNhbHQ\$RdescudvJCsgt3ub+b+dWRWJTmaaJObG',
+        ),
+      );
+    });
+
+    test('argon2d encoded async', () async {
+      final nativeArgon2 = NativeArgon2();
+      final int encodedLen = 128;
+      final Pointer<Char> encodedPtr = malloc.allocate<Char>(encodedLen);
+      final params = Argon2EncodedParams(
+        tCost: 2,
+        mCost: 65536,
+        parallelism: 4,
+        password: utf8.encode('password'),
+        salt: utf8.encode('somesalt'),
+        hashLen: 24,
+        encoded: encodedPtr,
+        encodedLen: encodedLen,
+      );
+      final result = await nativeArgon2.argon2dHashEncodedAsync(params);
+      expect(result, 0);
+      final encodedStr = encodedPtr.cast<Utf8>().toDartString();
+      malloc.free(encodedPtr);
+      expect(
+        encodedStr,
+        equals(
+          '\$argon2d\$v=19\$m=65536,t=2,p=4\$c29tZXNhbHQ\$7Kn6V2imUuaFkZmKdZLb3nvg91N5Lt7H',
+        ),
+      );
+    });
+
+    test('argon2id encoded async', () async {
+      final nativeArgon2 = NativeArgon2();
+      final int encodedLen = 128;
+      final Pointer<Char> encodedPtr = malloc.allocate<Char>(encodedLen);
+      final params = Argon2EncodedParams(
+        tCost: 2,
+        mCost: 65536,
+        parallelism: 4,
+        password: utf8.encode('password'),
+        salt: utf8.encode('somesalt'),
+        hashLen: 24,
+        encoded: encodedPtr,
+        encodedLen: encodedLen,
+      );
+      final result = await nativeArgon2.argon2idHashEncodedAsync(params);
+      expect(result, 0);
+      final encodedStr = encodedPtr.cast<Utf8>().toDartString();
+      malloc.free(encodedPtr);
+      expect(
+        encodedStr,
+        equals(
+          '\$argon2id\$v=19\$m=65536,t=2,p=4\$c29tZXNhbHQ\$F1jG2CV3/Nr+yRuIsPKw0J9r4s7cJHBU',
         ),
       );
     });
