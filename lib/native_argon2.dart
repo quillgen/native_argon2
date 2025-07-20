@@ -54,24 +54,6 @@ class NativeArgon2 {
     bindings = NativeArgon2Bindings(dylib);
   }
 
-  /// A very short-lived native function that can be called directly.
-  int sum(int a, int b) => bindings.sum(a, b);
-
-  /// A longer-lived native function that should be called in an isolate.
-  Future<int> sumAsync(int a, int b) async {
-    final sendPort = await _getHelperIsolateSendPort();
-
-    final requestId = _nextRequestId++;
-    final completer = Completer<int>();
-    _requests[requestId] = completer;
-
-    // Send request to isolate
-    sendPort.send(_SumRequest(requestId, a, b));
-
-    return completer.future;
-  }
-
-  /// Gets or initializes the helper isolate
   Future<SendPort> _getHelperIsolateSendPort() async {
     if (_helperIsolateSendPort != null) {
       return _helperIsolateSendPort!;
@@ -85,26 +67,15 @@ class NativeArgon2 {
     return _isolateCompleter!.future;
   }
 
-  /// Initializes a helper isolate for running FFI code
   void _initializeHelperIsolate() {
     final receivePort = ReceivePort();
     receivePort.listen((dynamic data) {
       if (data is SendPort) {
-        // Store the send port from the helper isolate
         _helperIsolateSendPort = data;
         _isolateCompleter!.complete(data);
         return;
       }
-
-      if (data is _SumResponse) {
-        // Process the response from the helper isolate
-        final completer = _requests[data.id];
-        if (completer != null) {
-          _requests.remove(data.id);
-          completer.complete(data.result);
-        }
-        return;
-      } else if (data is _Argon2iHashResponse) {
+      if (data is _Argon2iHashResponse) {
         final completer = _requests[data.id];
         if (completer != null) {
           _requests.remove(data.id);
@@ -138,11 +109,7 @@ class NativeArgon2 {
     final bindings = NativeArgon2Bindings(dylib);
 
     receivePort.listen((dynamic data) {
-      if (data is _SumRequest) {
-        final result = bindings.sum_long_running(data.a, data.b);
-        setup.sendPort.send(_SumResponse(data.id, result));
-        return;
-      } else if (data is _Argon2iHashRequest) {
+      if (data is _Argon2iHashRequest) {
         final params = data.params;
         final pwdPtr = calloc<Uint8>(params.password.length);
         final saltPtr = calloc<Uint8>(params.salt.length);
@@ -224,23 +191,6 @@ class _IsolateSetup {
   final String? customLibraryPath;
 
   const _IsolateSetup(this.sendPort, this.customLibraryPath);
-}
-
-/// A request to compute `sum_long_running`.
-class _SumRequest {
-  final int id;
-  final int a;
-  final int b;
-
-  const _SumRequest(this.id, this.a, this.b);
-}
-
-/// A response with the result of `sum_long_running`.
-class _SumResponse {
-  final int id;
-  final int result;
-
-  const _SumResponse(this.id, this.result);
 }
 
 class _Argon2iHashRequest {

@@ -19,8 +19,6 @@ class MyApp extends StatefulWidget {
 
 class _MyAppState extends State<MyApp> {
   final nativeArgon2 = NativeArgon2();
-  late int sumResult;
-  late Future<int> sumAsyncResult;
   late Future<String> argon2iAsyncResult;
 
   Future<String> _argon2i() async {
@@ -55,8 +53,6 @@ class _MyAppState extends State<MyApp> {
   @override
   void initState() {
     super.initState();
-    sumResult = nativeArgon2.sum(1, 2);
-    sumAsyncResult = nativeArgon2.sumAsync(3, 4);
     argon2iAsyncResult = _argon2i();
   }
 
