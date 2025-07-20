@@ -12,12 +12,13 @@ FFI_PLUGIN_EXPORT int sum(int a, int b) { return a + b; }
 // Do not call these kind of native functions in the main isolate. They will
 // block Dart execution. This will cause dropped frames in Flutter applications.
 // Instead, call these native functions on a separate isolate.
-FFI_PLUGIN_EXPORT int sum_long_running(int a, int b) {
+FFI_PLUGIN_EXPORT int sum_long_running(int a, int b)
+{
   // Simulate work.
 #if _WIN32
-  Sleep(5000);
+  Sleep(500);
 #else
-  usleep(5000 * 1000);
+  usleep(500 * 1000);
 #endif
   return a + b;
 }
