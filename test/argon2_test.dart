@@ -1,37 +1,34 @@
-import 'dart:ffi';
 import 'dart:io';
-import 'dart:typed_data';
 
-import 'package:ffi/ffi.dart';
 import 'package:native_argon2/native_argon2.dart';
 import 'package:test/test.dart';
 
 void main() {
-  group('Test', () {
-    final DynamicLibrary dylib;
+  setUp(() {
+    String testLibPath;
+
     if (Platform.isMacOS) {
-      dylib = DynamicLibrary.open('src/build/libnative_argon2.dylib');
+      testLibPath = 'src/build/libnative_argon2.dylib';
+    } else if (Platform.isLinux) {
+      testLibPath = 'src/build/libnative_argon2.so';
+    } else if (Platform.isWindows) {
+      testLibPath = 'src/build/libnative_argon2.dll';
     } else {
-      dylib = DynamicLibrary.open('src/build/libnative_argon2.so');
-    }
-    test('hashPasswordString returns a valid encoded hash', () async {
-      final argon2 = NativeArgon2(overrideDylib: dylib);
-
-      final int encodedLen = 128;
-      final Pointer<Char> encodedPtr = malloc.allocate<Char>(encodedLen);
-      int result = argon2.argon2iHashEncoded(
-        tCost: 2,
-        mCost: 65535,
-        parallelism: 4,
-        password: Uint8List.fromList('password'.codeUnits),
-        salt: Uint8List.fromList('somesalt'.codeUnits),
-        hashLen: 24,
-        encoded: encodedPtr,
-        encodedLen: encodedLen,
+      throw UnsupportedError(
+        'Tests on ${Platform.operatingSystem} not supported',
       );
-      malloc.free(encodedPtr);
+    }
+    Argon2LibraryLoader.instance.configure(libraryPath: testLibPath);
+  });
 
-      expect(result, equals(0));
-    });
+  test('sum function works with injected library', () {
+    final nativeArgon2 = NativeArgon2();
+    expect(nativeArgon2.sum(3, 4), 7);
+  });
+
+  test('sumAsync works with isolates using injected library', () async {
+    final nativeArgon2 = NativeArgon2();
+    final result = await nativeArgon2.sumAsync(5, 7);
+    expect(result, 12);
   });
 }

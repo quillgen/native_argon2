@@ -4,7 +4,7 @@ import 'dart:typed_data';
 
 import 'package:ffi/ffi.dart';
 import 'package:flutter/material.dart';
-import 'package:native_argon2/native_argon2.dart' as native_argon2;
+import 'package:native_argon2/native_argon2.dart';
 
 void main() {
   runApp(const MyApp());
@@ -18,14 +18,15 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
+  final nativeArgon2 = NativeArgon2();
   late int sumResult;
   late Future<int> sumAsyncResult;
 
   @override
   void initState() {
     super.initState();
-    sumResult = native_argon2.sum(1, 2);
-    sumAsyncResult = native_argon2.sumAsync(3, 4);
+    sumResult = nativeArgon2.sum(1, 2);
+    sumAsyncResult = nativeArgon2.sumAsync(3, 4);
 
     final password = Uint8List.fromList('password'.codeUnits);
     final salt = Uint8List.fromList('somesalt'.codeUnits);
