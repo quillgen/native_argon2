@@ -29,6 +29,7 @@ void main() {
       final nativeArgon2 = NativeArgon2();
       final int encodedLen = 128;
       final Pointer<Char> encodedPtr = malloc.allocate<Char>(encodedLen);
+
       final params = Argon2EncodedParams(
         tCost: 2,
         mCost: 65536,
@@ -42,7 +43,7 @@ void main() {
       final result = nativeArgon2.argon2iHashEncoded(params);
       expect(result, 0);
       final encodedStr = encodedPtr.cast<Utf8>().toDartString();
-
+      malloc.free(encodedPtr);
       expect(
         encodedStr,
         equals(
@@ -68,7 +69,7 @@ void main() {
       final result = nativeArgon2.argon2dHashEncoded(params);
       expect(result, 0);
       final encodedStr = encodedPtr.cast<Utf8>().toDartString();
-
+      malloc.free(encodedPtr);
       expect(
         encodedStr,
         equals(
@@ -94,7 +95,7 @@ void main() {
       final result = nativeArgon2.argon2idHashEncoded(params);
       expect(result, 0);
       final encodedStr = encodedPtr.cast<Utf8>().toDartString();
-
+      malloc.free(encodedPtr);
       expect(
         encodedStr,
         equals(

@@ -74,8 +74,7 @@ class NativeArgon2 {
         _helperIsolateSendPort = data;
         _isolateCompleter!.complete(data);
         return;
-      }
-      if (data is _Argon2HashResponse) {
+      } else if (data is _Argon2HashResponse) {
         final completer = _requests[data.id];
         if (completer != null) {
           _requests.remove(data.id);
@@ -117,12 +116,40 @@ class NativeArgon2 {
         );
 
         setup.sendPort.send(_Argon2HashResponse(data.id, result));
+      } else if (data is _Argon2RawRequest) {
+        final result = _argon2HashRawByType(data.type, bindings, data.params);
+
+        setup.sendPort.send(_Argon2HashResponse(data.id, result));
       }
 
       throw UnsupportedError('Unsupported message: ${data.runtimeType}');
     });
 
     setup.sendPort.send(receivePort.sendPort);
+  }
+
+  int argon2iHashRaw(Argon2RawParams params) {
+    return _argon2HashRawByType(Argon2_type.Argon2_i, bindings, params);
+  }
+
+  int argon2dHashRaw(Argon2RawParams params) {
+    return _argon2HashRawByType(Argon2_type.Argon2_d, bindings, params);
+  }
+
+  int argon2idHashRaw(Argon2RawParams params) {
+    return _argon2HashRawByType(Argon2_type.Argon2_id, bindings, params);
+  }
+
+  Future<int> argon2iHashRawAsync(Argon2RawParams params) async {
+    return _argon2HashRawAsync(Argon2_type.Argon2_i, params);
+  }
+
+  Future<int> argon2dHashRawAsync(Argon2RawParams params) async {
+    return _argon2HashRawAsync(Argon2_type.Argon2_d, params);
+  }
+
+  Future<int> argon2idHashRawAsync(Argon2RawParams params) async {
+    return _argon2HashRawAsync(Argon2_type.Argon2_id, params);
   }
 
   int argon2iHashEncoded(Argon2EncodedParams params) {
@@ -163,6 +190,21 @@ class NativeArgon2 {
     final result = await completer.future;
     return result.result;
   }
+
+  Future<int> _argon2HashRawAsync(
+    Argon2_type type,
+    Argon2RawParams params,
+  ) async {
+    final sendPort = await _getHelperIsolateSendPort();
+    final requestId = _nextRequestId++;
+    final completer = Completer<_Argon2HashResponse>();
+    _requests[requestId] = completer;
+
+    sendPort.send(_Argon2RawRequest(requestId, type, params));
+
+    final result = await completer.future;
+    return result.result;
+  }
 }
 
 /// Configuration data for setting up the helper isolate
@@ -179,6 +221,14 @@ class _Argon2EncodedRequest {
   final Argon2EncodedParams params;
 
   _Argon2EncodedRequest(this.id, this.type, this.params);
+}
+
+class _Argon2RawRequest {
+  final int id;
+  final Argon2_type type;
+  final Argon2RawParams params;
+
+  _Argon2RawRequest(this.id, this.type, this.params);
 }
 
 class _Argon2HashResponse {
@@ -266,5 +316,82 @@ int _argon2HashEncoded(
   } finally {
     calloc.free(pwdPtr);
     calloc.free(saltPtr);
+  }
+}
+
+class Argon2RawParams {
+  final int tCost;
+  final int mCost;
+  final int parallelism;
+  final Uint8List password;
+  final Uint8List salt;
+  final Pointer<Void> hash;
+  final int hashLen;
+
+  Argon2RawParams({
+    this.tCost = 3,
+    this.mCost = 12,
+    this.parallelism = 1,
+    required this.password,
+    required this.salt,
+    this.hashLen = 32,
+    required this.hash,
+  });
+}
+
+typedef _Argon2HashRawFunction =
+    int Function(
+      int tCost,
+      int mCost,
+      int parallelism,
+      Pointer<Void> pwd,
+      int pwdlen,
+      Pointer<Void> salt,
+      int saltlen,
+      Pointer<Void> hash,
+      int hashlen,
+    );
+
+int _argon2HashRaw(
+  _Argon2HashRawFunction hashFunction,
+  Argon2RawParams params,
+) {
+  final pwdPtr = calloc<Uint8>(params.password.length);
+  final saltPtr = calloc<Uint8>(params.salt.length);
+
+  try {
+    pwdPtr.asTypedList(params.password.length).setAll(0, params.password);
+    saltPtr.asTypedList(params.salt.length).setAll(0, params.salt);
+
+    final result = hashFunction(
+      params.tCost,
+      params.mCost,
+      params.parallelism,
+      pwdPtr.cast<Void>(),
+      params.password.length,
+      saltPtr.cast<Void>(),
+      params.salt.length,
+      params.hash,
+      params.hashLen,
+    );
+    return result;
+  } finally {
+    calloc.free(pwdPtr);
+    calloc.free(saltPtr);
+  }
+}
+
+int _argon2HashRawByType(
+  Argon2_type type,
+  NativeArgon2Bindings bindings,
+  Argon2RawParams params,
+) {
+  switch (type) {
+    case Argon2_type.Argon2_d:
+      return _argon2HashRaw(bindings.argon2d_hash_raw, params);
+    case Argon2_type.Argon2_i:
+      return _argon2HashRaw(bindings.argon2i_hash_raw, params);
+    case Argon2_type.Argon2_id:
+      return _argon2HashRaw(bindings.argon2id_hash_raw, params);
   }
 }
