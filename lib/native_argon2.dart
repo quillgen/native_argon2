@@ -131,38 +131,61 @@ Future<SendPort> _helperIsolateSendPort = () async {
   return completer.future;
 }();
 
-int argon2iHashEncoded({
-  required int tCost,
-  required int mCost,
-  required int parallelism,
-  required Uint8List password,
-  required Uint8List salt,
-  required int hashLen,
-  required Pointer<Char> encoded,
-  required int encodedLen,
-}) {
-  final pwdPtr = malloc.allocate<Uint8>(password.length);
-  final saltPtr = malloc.allocate<Uint8>(salt.length);
+class NativeArgon2 {
+  final DynamicLibrary dylib;
+  late final NativeArgon2Bindings bindings;
 
-  try {
-    pwdPtr.asTypedList(password.length).setAll(0, password);
-    saltPtr.asTypedList(salt.length).setAll(0, salt);
+  NativeArgon2({DynamicLibrary? overrideDylib})
+    : dylib = overrideDylib ?? _loadDynamicLibrary() {
+    bindings = NativeArgon2Bindings(dylib);
+  }
 
-    final result = _bindings.argon2i_hash_encoded(
-      tCost,
-      mCost,
-      parallelism,
-      pwdPtr.cast<Void>(),
-      password.length,
-      saltPtr.cast<Void>(),
-      salt.length,
-      hashLen,
-      encoded,
-      encodedLen,
-    );
-    return result;
-  } finally {
-    malloc.free(pwdPtr);
-    malloc.free(saltPtr);
+  static DynamicLibrary _loadDynamicLibrary() {
+    if (Platform.isMacOS || Platform.isIOS) {
+      return DynamicLibrary.open('$_libName.framework/$_libName');
+    }
+    if (Platform.isAndroid || Platform.isLinux) {
+      return DynamicLibrary.open('lib$_libName.so');
+    }
+    if (Platform.isWindows) {
+      return DynamicLibrary.open('$_libName.dll');
+    }
+    throw UnsupportedError('Unknown platform: ${Platform.operatingSystem}');
+  }
+
+  int argon2iHashEncoded({
+    required int tCost,
+    required int mCost,
+    required int parallelism,
+    required Uint8List password,
+    required Uint8List salt,
+    required int hashLen,
+    required Pointer<Char> encoded,
+    required int encodedLen,
+  }) {
+    final pwdPtr = malloc.allocate<Uint8>(password.length);
+    final saltPtr = malloc.allocate<Uint8>(salt.length);
+
+    try {
+      pwdPtr.asTypedList(password.length).setAll(0, password);
+      saltPtr.asTypedList(salt.length).setAll(0, salt);
+
+      final result = bindings.argon2i_hash_encoded(
+        tCost,
+        mCost,
+        parallelism,
+        pwdPtr.cast<Void>(),
+        password.length,
+        saltPtr.cast<Void>(),
+        salt.length,
+        hashLen,
+        encoded,
+        encodedLen,
+      );
+      return result;
+    } finally {
+      malloc.free(pwdPtr);
+      malloc.free(saltPtr);
+    }
   }
 }

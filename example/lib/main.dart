@@ -5,7 +5,6 @@ import 'dart:typed_data';
 import 'package:ffi/ffi.dart';
 import 'package:flutter/material.dart';
 import 'package:native_argon2/native_argon2.dart' as native_argon2;
-import 'package:native_argon2/native_argon2.dart';
 
 void main() {
   runApp(const MyApp());
@@ -28,38 +27,38 @@ class _MyAppState extends State<MyApp> {
     sumResult = native_argon2.sum(1, 2);
     sumAsyncResult = native_argon2.sumAsync(3, 4);
 
-    final password = Uint8List.fromList('my_password'.codeUnits);
-    final salt = Uint8List.fromList('random_salt'.codeUnits);
+    final password = Uint8List.fromList('password'.codeUnits);
+    final salt = Uint8List.fromList('somesalt'.codeUnits);
 
     final int tCost = 2;
     final int mCost = 65536;
-    final int parallelism = 1;
-    final int hashLen = 32;
+    final int parallelism = 4;
+    final int hashLen = 24;
     final int encodedLen = 128; // Must be large enough for encoded output
 
     // Allocate buffer for the encoded output
     final Pointer<Char> encodedPtr = malloc.allocate<Char>(encodedLen);
 
     try {
-      // Call your wrapper function
-      final result = argon2iHashEncoded(
-        tCost: tCost,
-        mCost: mCost,
-        parallelism: parallelism,
-        password: password,
-        salt: salt,
-        hashLen: hashLen,
-        encoded: encodedPtr,
-        encodedLen: encodedLen,
-      );
+      // // Call your wrapper function
+      // final result = argon2iHashEncoded(
+      //   tCost: tCost,
+      //   mCost: mCost,
+      //   parallelism: parallelism,
+      //   password: password,
+      //   salt: salt,
+      //   hashLen: hashLen,
+      //   encoded: encodedPtr,
+      //   encodedLen: encodedLen,
+      // );
 
-      if (result == 0) {
-        // Success! Read result as Dart string
-        final encodedStr = encodedPtr.cast<Utf8>().toDartString();
-        print('Encoded Argon2 Hash: $encodedStr');
-      } else {
-        print('Argon2 failed with error code: $result');
-      }
+      // if (result == 0) {
+      //   // Success! Read result as Dart string
+      //   final encodedStr = encodedPtr.cast<Utf8>().toDartString();
+      //   print('Encoded Argon2 Hash: $encodedStr');
+      // } else {
+      //   print('Argon2 failed with error code: $result');
+      // }
     } finally {
       malloc.free(encodedPtr);
     }
