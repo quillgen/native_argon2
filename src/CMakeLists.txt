@@ -6,7 +6,6 @@ cmake_minimum_required(VERSION 3.10)
 project(native_argon2_library VERSION 0.0.1 LANGUAGES C)
 
 add_library(native_argon2 SHARED
-  "native_argon2.c"
   "argon2.c"
   "core.c"
   "blake2/blake2b.c"
@@ -20,7 +19,7 @@ target_include_directories(native_argon2 PRIVATE
 )
 
 set_target_properties(native_argon2 PROPERTIES
-  PUBLIC_HEADER native_argon2.h
+  PUBLIC_HEADER argon2.h
   OUTPUT_NAME "native_argon2"
 )
 
