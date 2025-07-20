@@ -109,7 +109,7 @@ class NativeArgon2 {
     final bindings = NativeArgon2Bindings(dylib);
 
     receivePort.listen((dynamic data) {
-      if (data is _Argon2iHashRequest) {
+      if (data is _Argon2EncodedRequest) {
         final params = data.params;
         final pwdPtr = calloc<Uint8>(params.password.length);
         final saltPtr = calloc<Uint8>(params.salt.length);
@@ -118,17 +118,9 @@ class NativeArgon2 {
           pwdPtr.asTypedList(params.password.length).setAll(0, params.password);
           saltPtr.asTypedList(params.salt.length).setAll(0, params.salt);
 
-          final result = bindings.argon2i_hash_encoded(
-            params.tCost,
-            params.mCost,
-            params.parallelism,
-            pwdPtr.cast<Void>(),
-            params.password.length,
-            saltPtr.cast<Void>(),
-            params.salt.length,
-            params.hashLen,
-            params.encoded,
-            params.encodedLen,
+          final result = _argon2HashEncoded(
+            bindings.argon2i_hash_encoded,
+            params,
           );
 
           setup.sendPort.send(_Argon2iHashResponse(data.id, result));
@@ -146,39 +138,31 @@ class NativeArgon2 {
   }
 
   int argon2iHashEncoded(Argon2EncodedParams params) {
-    final pwdPtr = calloc<Uint8>(params.password.length);
-    final saltPtr = calloc<Uint8>(params.salt.length);
-
-    try {
-      pwdPtr.asTypedList(params.password.length).setAll(0, params.password);
-      saltPtr.asTypedList(params.salt.length).setAll(0, params.salt);
-
-      final result = bindings.argon2i_hash_encoded(
-        params.tCost,
-        params.mCost,
-        params.parallelism,
-        pwdPtr.cast<Void>(),
-        params.password.length,
-        saltPtr.cast<Void>(),
-        params.salt.length,
-        params.hashLen,
-        params.encoded,
-        params.encodedLen,
-      );
-      return result;
-    } finally {
-      calloc.free(pwdPtr);
-      calloc.free(saltPtr);
-    }
+    return _argon2HashEncoded(bindings.argon2i_hash_encoded, params);
   }
 
   Future<int> argon2iHashEncodedAsync(Argon2EncodedParams params) async {
+    return _argon2HashEncodedAsync(_Argon2Type.argon2i, params);
+  }
+
+  Future<int> argon2dHashEncodedAsync(Argon2EncodedParams params) async {
+    return _argon2HashEncodedAsync(_Argon2Type.argon2d, params);
+  }
+
+  Future<int> argon2idHashEncodedAsync(Argon2EncodedParams params) async {
+    return _argon2HashEncodedAsync(_Argon2Type.argon2id, params);
+  }
+
+  Future<int> _argon2HashEncodedAsync(
+    _Argon2Type type,
+    Argon2EncodedParams params,
+  ) async {
     final sendPort = await _getHelperIsolateSendPort();
     final requestId = _nextRequestId++;
     final completer = Completer<_Argon2iHashResponse>();
     _requests[requestId] = completer;
 
-    sendPort.send(_Argon2iHashRequest(requestId, params));
+    sendPort.send(_Argon2EncodedRequest(requestId, type, params));
 
     final result = await completer.future;
     return result.result;
@@ -193,11 +177,14 @@ class _IsolateSetup {
   const _IsolateSetup(this.sendPort, this.customLibraryPath);
 }
 
-class _Argon2iHashRequest {
+enum _Argon2Type { argon2d, argon2i, argon2id }
+
+class _Argon2EncodedRequest {
   final int id;
+  final _Argon2Type type;
   final Argon2EncodedParams params;
 
-  _Argon2iHashRequest(this.id, this.params);
+  _Argon2EncodedRequest(this.id, this.type, this.params);
 }
 
 class _Argon2iHashResponse {
@@ -227,4 +214,48 @@ class Argon2EncodedParams {
     required this.encoded,
     required this.encodedLen,
   });
+}
+
+typedef _Argon2HashEncodedFunction =
+    int Function(
+      int tCost,
+      int mCost,
+      int parallelism,
+      Pointer<Void> pwd,
+      int pwdlen,
+      Pointer<Void> salt,
+      int saltlen,
+      int hashlen,
+      Pointer<Char> encoded,
+      int encodedlen,
+    );
+
+int _argon2HashEncoded(
+  _Argon2HashEncodedFunction encodeFunction,
+  Argon2EncodedParams params,
+) {
+  final pwdPtr = calloc<Uint8>(params.password.length);
+  final saltPtr = calloc<Uint8>(params.salt.length);
+
+  try {
+    pwdPtr.asTypedList(params.password.length).setAll(0, params.password);
+    saltPtr.asTypedList(params.salt.length).setAll(0, params.salt);
+
+    final result = encodeFunction(
+      params.tCost,
+      params.mCost,
+      params.parallelism,
+      pwdPtr.cast<Void>(),
+      params.password.length,
+      saltPtr.cast<Void>(),
+      params.salt.length,
+      params.hashLen,
+      params.encoded,
+      params.encodedLen,
+    );
+    return result;
+  } finally {
+    calloc.free(pwdPtr);
+    calloc.free(saltPtr);
+  }
 }

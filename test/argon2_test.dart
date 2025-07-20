@@ -24,17 +24,6 @@ void main() {
     Argon2LibraryLoader.instance.configure(libraryPath: testLibPath);
   });
 
-  test('sum function works with injected library', () {
-    final nativeArgon2 = NativeArgon2();
-    expect(nativeArgon2.sum(3, 4), 7);
-  });
-
-  test('sumAsync works with isolates using injected library', () async {
-    final nativeArgon2 = NativeArgon2();
-    final result = await nativeArgon2.sumAsync(5, 7);
-    expect(result, 12);
-  });
-
   group('Argon2i wrapped high-level api', () {
     test('argon2i returns a valid encoded hash', () async {
       final nativeArgon2 = NativeArgon2();
