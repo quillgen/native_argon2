@@ -1,6 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:ffi';
-import 'dart:typed_data';
 
 import 'package:ffi/ffi.dart';
 import 'package:flutter/material.dart';
@@ -21,53 +21,48 @@ class _MyAppState extends State<MyApp> {
   final nativeArgon2 = NativeArgon2();
   late int sumResult;
   late Future<int> sumAsyncResult;
+  late Future<String> argon2iAsyncResult;
 
-  @override
-  void initState() {
-    super.initState();
-    sumResult = nativeArgon2.sum(1, 2);
-    sumAsyncResult = nativeArgon2.sumAsync(3, 4);
-
-    final password = Uint8List.fromList('password'.codeUnits);
-    final salt = Uint8List.fromList('somesalt'.codeUnits);
-
-    final int tCost = 2;
-    final int mCost = 65536;
-    final int parallelism = 4;
-    final int hashLen = 24;
-    final int encodedLen = 128; // Must be large enough for encoded output
-
-    // Allocate buffer for the encoded output
+  Future<String> _argon2i() async {
+    final int encodedLen = 128;
     final Pointer<Char> encodedPtr = malloc.allocate<Char>(encodedLen);
-
     try {
-      // // Call your wrapper function
-      // final result = argon2iHashEncoded(
-      //   tCost: tCost,
-      //   mCost: mCost,
-      //   parallelism: parallelism,
-      //   password: password,
-      //   salt: salt,
-      //   hashLen: hashLen,
-      //   encoded: encodedPtr,
-      //   encodedLen: encodedLen,
-      // );
-
-      // if (result == 0) {
-      //   // Success! Read result as Dart string
-      //   final encodedStr = encodedPtr.cast<Utf8>().toDartString();
-      //   print('Encoded Argon2 Hash: $encodedStr');
-      // } else {
-      //   print('Argon2 failed with error code: $result');
-      // }
+      int result = await nativeArgon2.argon2iHashEncodedAsync(
+        Argon2EncodedParams(
+          tCost: 2,
+          mCost: 1 << 16,
+          parallelism: 4,
+          password: utf8.encode('password'),
+          salt: utf8.encode('somesalt'),
+          hashLen: 24,
+          encoded: encodedPtr,
+          encodedLen: encodedLen,
+        ),
+      );
+      if (result == 0) {
+        final encodedStr = encodedPtr.cast<Utf8>().toDartString();
+        return encodedStr;
+      } else {
+        throw Exception(
+          'Argon2i hash encoding failed with error code: $result',
+        );
+      }
     } finally {
       malloc.free(encodedPtr);
     }
   }
 
   @override
+  void initState() {
+    super.initState();
+    sumResult = nativeArgon2.sum(1, 2);
+    sumAsyncResult = nativeArgon2.sumAsync(3, 4);
+    argon2iAsyncResult = _argon2i();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    const textStyle = TextStyle(fontSize: 25);
+    const textStyle = TextStyle(fontSize: 12);
     const spacerSmall = SizedBox(height: 10);
     return MaterialApp(
       home: Scaffold(
@@ -78,26 +73,32 @@ class _MyAppState extends State<MyApp> {
             child: Column(
               children: [
                 const Text(
-                  'This calls a native function through FFI that is shipped as source in the package. '
-                  'The native code is built as part of the Flutter Runner build.',
+                  """
+Expected result: 
+https://github.com/P-H-C/phc-winner-argon2/tree/master
+
+\$ echo -n "password" | ./argon2 somesalt -t 2 -m 16 -p 4 -l 24
+Type:           Argon2i
+Iterations:     2
+Memory:         65536 KiB
+Parallelism:    4
+Hash:           45d7ac72e76f242b20b77b9bf9bf9d5915894e669a24e6c6
+Encoded:        \$argon2i\$v=19\$m=65536,t=2,p=4\$c29tZXNhbHQ\$RdescudvJCsgt3ub+b+dWRWJTmaaJObG
+0.188 seconds
+Verification ok""",
                   style: textStyle,
-                  textAlign: TextAlign.center,
+                  textAlign: TextAlign.left,
                 ),
+
                 spacerSmall,
-                Text(
-                  'sum(1, 2) = $sumResult',
-                  style: textStyle,
-                  textAlign: TextAlign.center,
-                ),
-                spacerSmall,
-                FutureBuilder<int>(
-                  future: sumAsyncResult,
-                  builder: (BuildContext context, AsyncSnapshot<int> value) {
+                FutureBuilder<String>(
+                  future: argon2iAsyncResult,
+                  builder: (BuildContext context, AsyncSnapshot<String> value) {
                     final displayValue = (value.hasData)
                         ? value.data
                         : 'loading';
                     return Text(
-                      'await sumAsync(3, 4) = $displayValue',
+                      'Actual result = $displayValue',
                       style: textStyle,
                       textAlign: TextAlign.center,
                     );

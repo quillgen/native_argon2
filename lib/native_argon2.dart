@@ -3,33 +3,29 @@ import 'dart:developer';
 import 'dart:ffi';
 import 'dart:io';
 import 'dart:isolate';
+import 'dart:typed_data';
+
+import 'package:ffi/ffi.dart';
 
 import 'native_argon2_bindings_generated.dart';
 
 const String _libName = 'native_argon2';
 
-/// Library loader that can be configured for different environments
 class Argon2LibraryLoader {
-  // Static instance for global configuration
   static Argon2LibraryLoader instance = Argon2LibraryLoader();
 
-  // Custom path that can be injected for testing
   String? _customLibraryPath;
 
-  // Configure the loader with a custom path
   void configure({String? libraryPath}) {
     _customLibraryPath = libraryPath;
   }
 
-  // Load the appropriate library based on configuration
   DynamicLibrary load() {
-    // Use custom path if provided
     if (_customLibraryPath != null) {
       log('Loading library from custom path: $_customLibraryPath');
       return DynamicLibrary.open(_customLibraryPath!);
     }
 
-    // Default platform-specific paths
     if (Platform.isMacOS || Platform.isIOS) {
       return DynamicLibrary.open('$_libName.framework/$_libName');
     }
@@ -47,15 +43,12 @@ class NativeArgon2 {
   final DynamicLibrary dylib;
   late final NativeArgon2Bindings bindings;
 
-  // For managing async requests
   int _nextRequestId = 0;
-  final Map<int, Completer<int>> _requests = {};
+  final Map<int, Completer<dynamic>> _requests = {};
 
-  // Lazy-initialized helper isolate
   SendPort? _helperIsolateSendPort;
   Completer<SendPort>? _isolateCompleter;
 
-  // Constructor with dependency injection
   NativeArgon2({DynamicLibrary? overrideDylib})
     : dylib = overrideDylib ?? Argon2LibraryLoader.instance.load() {
     bindings = NativeArgon2Bindings(dylib);
@@ -111,6 +104,13 @@ class NativeArgon2 {
           completer.complete(data.result);
         }
         return;
+      } else if (data is _Argon2iHashResponse) {
+        final completer = _requests[data.id];
+        if (completer != null) {
+          _requests.remove(data.id);
+          completer.complete(data);
+        }
+        return;
       }
 
       throw UnsupportedError('Unsupported message: ${data.runtimeType}');
@@ -126,38 +126,95 @@ class NativeArgon2 {
     );
   }
 
-  /// Static method to run in the helper isolate
   static void _isolateMain(_IsolateSetup setup) {
-    // Create a receive port for incoming messages
     final receivePort = ReceivePort();
-
-    // Configure the library loader in this isolate with the same path
     if (setup.customLibraryPath != null) {
       Argon2LibraryLoader.instance.configure(
         libraryPath: setup.customLibraryPath,
       );
     }
 
-    // Load the library using the configured loader
     final dylib = Argon2LibraryLoader.instance.load();
     final bindings = NativeArgon2Bindings(dylib);
 
-    // Listen for requests
     receivePort.listen((dynamic data) {
       if (data is _SumRequest) {
-        // Execute the long-running FFI function
         final result = bindings.sum_long_running(data.a, data.b);
-
-        // Send the result back
         setup.sendPort.send(_SumResponse(data.id, result));
         return;
+      } else if (data is _Argon2iHashRequest) {
+        final params = data.params;
+        final pwdPtr = calloc<Uint8>(params.password.length);
+        final saltPtr = calloc<Uint8>(params.salt.length);
+
+        try {
+          pwdPtr.asTypedList(params.password.length).setAll(0, params.password);
+          saltPtr.asTypedList(params.salt.length).setAll(0, params.salt);
+
+          final result = bindings.argon2i_hash_encoded(
+            params.tCost,
+            params.mCost,
+            params.parallelism,
+            pwdPtr.cast<Void>(),
+            params.password.length,
+            saltPtr.cast<Void>(),
+            params.salt.length,
+            params.hashLen,
+            params.encoded,
+            params.encodedLen,
+          );
+
+          setup.sendPort.send(_Argon2iHashResponse(data.id, result));
+          return;
+        } finally {
+          calloc.free(pwdPtr);
+          calloc.free(saltPtr);
+        }
       }
 
       throw UnsupportedError('Unsupported message: ${data.runtimeType}');
     });
 
-    // Send this isolate's send port to the main isolate
     setup.sendPort.send(receivePort.sendPort);
+  }
+
+  int argon2iHashEncoded(Argon2EncodedParams params) {
+    final pwdPtr = calloc<Uint8>(params.password.length);
+    final saltPtr = calloc<Uint8>(params.salt.length);
+
+    try {
+      pwdPtr.asTypedList(params.password.length).setAll(0, params.password);
+      saltPtr.asTypedList(params.salt.length).setAll(0, params.salt);
+
+      final result = bindings.argon2i_hash_encoded(
+        params.tCost,
+        params.mCost,
+        params.parallelism,
+        pwdPtr.cast<Void>(),
+        params.password.length,
+        saltPtr.cast<Void>(),
+        params.salt.length,
+        params.hashLen,
+        params.encoded,
+        params.encodedLen,
+      );
+      return result;
+    } finally {
+      calloc.free(pwdPtr);
+      calloc.free(saltPtr);
+    }
+  }
+
+  Future<int> argon2iHashEncodedAsync(Argon2EncodedParams params) async {
+    final sendPort = await _getHelperIsolateSendPort();
+    final requestId = _nextRequestId++;
+    final completer = Completer<_Argon2iHashResponse>();
+    _requests[requestId] = completer;
+
+    sendPort.send(_Argon2iHashRequest(requestId, params));
+
+    final result = await completer.future;
+    return result.result;
   }
 }
 
@@ -184,4 +241,40 @@ class _SumResponse {
   final int result;
 
   const _SumResponse(this.id, this.result);
+}
+
+class _Argon2iHashRequest {
+  final int id;
+  final Argon2EncodedParams params;
+
+  _Argon2iHashRequest(this.id, this.params);
+}
+
+class _Argon2iHashResponse {
+  final int id;
+  final int result;
+
+  _Argon2iHashResponse(this.id, this.result);
+}
+
+class Argon2EncodedParams {
+  final int tCost;
+  final int mCost;
+  final int parallelism;
+  final Uint8List password;
+  final Uint8List salt;
+  final int hashLen;
+  final Pointer<Char> encoded;
+  final int encodedLen;
+
+  Argon2EncodedParams({
+    this.tCost = 3,
+    this.mCost = 12,
+    this.parallelism = 1,
+    required this.password,
+    required this.salt,
+    this.hashLen = 32,
+    required this.encoded,
+    required this.encodedLen,
+  });
 }
