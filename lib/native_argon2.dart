@@ -75,7 +75,7 @@ class NativeArgon2 {
         _isolateCompleter!.complete(data);
         return;
       }
-      if (data is _Argon2iHashResponse) {
+      if (data is _Argon2HashResponse) {
         final completer = _requests[data.id];
         if (completer != null) {
           _requests.remove(data.id);
@@ -111,24 +111,13 @@ class NativeArgon2 {
     receivePort.listen((dynamic data) {
       if (data is _Argon2EncodedRequest) {
         final params = data.params;
-        final pwdPtr = calloc<Uint8>(params.password.length);
-        final saltPtr = calloc<Uint8>(params.salt.length);
+        final result = _argon2HashEncodedByType(
+          Argon2_type.Argon2_i,
+          bindings,
+          params,
+        );
 
-        try {
-          pwdPtr.asTypedList(params.password.length).setAll(0, params.password);
-          saltPtr.asTypedList(params.salt.length).setAll(0, params.salt);
-
-          final result = _argon2HashEncoded(
-            bindings.argon2i_hash_encoded,
-            params,
-          );
-
-          setup.sendPort.send(_Argon2iHashResponse(data.id, result));
-          return;
-        } finally {
-          calloc.free(pwdPtr);
-          calloc.free(saltPtr);
-        }
+        setup.sendPort.send(_Argon2HashResponse(data.id, result));
       }
 
       throw UnsupportedError('Unsupported message: ${data.runtimeType}');
@@ -138,28 +127,36 @@ class NativeArgon2 {
   }
 
   int argon2iHashEncoded(Argon2EncodedParams params) {
-    return _argon2HashEncoded(bindings.argon2i_hash_encoded, params);
+    return _argon2HashEncodedByType(Argon2_type.Argon2_i, bindings, params);
+  }
+
+  int argon2dHashEncoded(Argon2EncodedParams params) {
+    return _argon2HashEncodedByType(Argon2_type.Argon2_d, bindings, params);
+  }
+
+  int argon2idHashEncoded(Argon2EncodedParams params) {
+    return _argon2HashEncodedByType(Argon2_type.Argon2_id, bindings, params);
   }
 
   Future<int> argon2iHashEncodedAsync(Argon2EncodedParams params) async {
-    return _argon2HashEncodedAsync(_Argon2Type.argon2i, params);
+    return _argon2HashEncodedAsync(Argon2_type.Argon2_i, params);
   }
 
   Future<int> argon2dHashEncodedAsync(Argon2EncodedParams params) async {
-    return _argon2HashEncodedAsync(_Argon2Type.argon2d, params);
+    return _argon2HashEncodedAsync(Argon2_type.Argon2_d, params);
   }
 
   Future<int> argon2idHashEncodedAsync(Argon2EncodedParams params) async {
-    return _argon2HashEncodedAsync(_Argon2Type.argon2id, params);
+    return _argon2HashEncodedAsync(Argon2_type.Argon2_id, params);
   }
 
   Future<int> _argon2HashEncodedAsync(
-    _Argon2Type type,
+    Argon2_type type,
     Argon2EncodedParams params,
   ) async {
     final sendPort = await _getHelperIsolateSendPort();
     final requestId = _nextRequestId++;
-    final completer = Completer<_Argon2iHashResponse>();
+    final completer = Completer<_Argon2HashResponse>();
     _requests[requestId] = completer;
 
     sendPort.send(_Argon2EncodedRequest(requestId, type, params));
@@ -177,21 +174,19 @@ class _IsolateSetup {
   const _IsolateSetup(this.sendPort, this.customLibraryPath);
 }
 
-enum _Argon2Type { argon2d, argon2i, argon2id }
-
 class _Argon2EncodedRequest {
   final int id;
-  final _Argon2Type type;
+  final Argon2_type type;
   final Argon2EncodedParams params;
 
   _Argon2EncodedRequest(this.id, this.type, this.params);
 }
 
-class _Argon2iHashResponse {
+class _Argon2HashResponse {
   final int id;
   final int result;
 
-  _Argon2iHashResponse(this.id, this.result);
+  _Argon2HashResponse(this.id, this.result);
 }
 
 class Argon2EncodedParams {
@@ -229,6 +224,21 @@ typedef _Argon2HashEncodedFunction =
       Pointer<Char> encoded,
       int encodedlen,
     );
+
+int _argon2HashEncodedByType(
+  Argon2_type type,
+  NativeArgon2Bindings bindings,
+  Argon2EncodedParams params,
+) {
+  switch (type) {
+    case Argon2_type.Argon2_d:
+      return _argon2HashEncoded(bindings.argon2d_hash_encoded, params);
+    case Argon2_type.Argon2_i:
+      return _argon2HashEncoded(bindings.argon2i_hash_encoded, params);
+    case Argon2_type.Argon2_id:
+      return _argon2HashEncoded(bindings.argon2id_hash_encoded, params);
+  }
+}
 
 int _argon2HashEncoded(
   _Argon2HashEncodedFunction encodeFunction,
